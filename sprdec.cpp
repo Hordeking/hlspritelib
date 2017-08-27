@@ -16,6 +16,9 @@
 #include <fstream>
 	using namespace std;
 
+#include <boost/filesystem.hpp>
+	using namespace boost::filesystem;
+
 #include <png++/png.hpp>
 #include <getopt.h>
 
@@ -32,22 +35,6 @@ void print_usage(void) {
 	cerr << "\t-q\t\tOutput a .qc file along with frames. (UNIMPLEMENTED)" << endl;
     cerr << "\t-n\t\tDry run, no file output" << endl;
     cerr << endl;
-}
-
-//Strip the file extension to get a base name. It only strips the last .ext out.
-string basename(string infilename){
-
-	size_t lastindex = infilename.find_last_of(".");
-
-	//Probably should handle the case where a period is the very first character, too.
-	if (lastindex == 0) return "default";
-
-	if (lastindex != std::string::npos ){
-		//If we found a '.', then do this.
-		return infilename.substr(0, lastindex);
-	}
-
-	return infilename;
 }
 
 
@@ -109,17 +96,30 @@ int main(int argc, char *argv[]){
 		exit(EXIT_FAILURE);
 	}
 
-	string InFileName = string(argv[idxArgArchiveFile]);
-	if (defaultbasename) BaseFileName = basename(InFileName);
+	// Okay, so we have everything we need. Let's parse the file a bit.
+	path InFileName(argv[idxArgArchiveFile]);
 
+	if (!is_regular_file(InFileName) && !is_symlink(InFileName)){
+		cerr << InFileName.filename().string() << " is not a proper file. Exiting." << endl;
+		exit(EXIT_FAILURE);
+	}
 
-	//This is where we input the file
-	ifstream infile( InFileName.c_str() );
+	// Grab the filename stem (the part before the period) for the frame names and assign this if we didn't override.
+	if (defaultbasename) BaseFileName = InFileName.stem().string();
 
-	//SprImage Myfile(foobar);
+	// This is where we input the file
 	SprImage Myfile;	//Use braces to disambiguate this. Google "Most Vexing Parse". Note: solved by not putting a ().
-	Myfile.load(infile);
+	ifstream infile( InFileName.string() );
+	
+	try {
+		Myfile.load(infile);
+	}
+	catch (const char * msg){
+		cerr << msg << endl;
+		exit(EXIT_FAILURE);
+	}
 	infile.close();
+	// Done inputting the file. Close the handle
 
 	if(verbose){
 
@@ -144,7 +144,7 @@ int main(int argc, char *argv[]){
 			  case Myfile.TextureType::SPR_NORMAL: cout << "SPR_NORMAL)"; break;
 			  case Myfile.TextureType::SPR_ADDITIVE: cout << "SPR_ADDITIVE)"; break;
 			  case Myfile.TextureType::SPR_INDEXALPHA: cout << "SPR_INDEXALPHA)"; break;
-			  case Myfile.TextureType::SPR_ALPHTEST: cout << "PR_ALPHTESTD)"; break;
+			  case Myfile.TextureType::SPR_ALPHTEST: cout << "SPR_ALPHTEST)"; break;
 			  default: cout << "Unknown)";
 		   }; cout << endl;
 
@@ -165,6 +165,34 @@ int main(int argc, char *argv[]){
 		if ( true || !defaultbasename ) cout << "Output frame name(s): " << BaseFileName << "_nnnnn" << endl << endl;
 	}
 
+
+	// Begin the qc file. Start with the info common to the sprite file
+	stringstream qcfile;
+	qcfile << "$spritename\t" << BaseFileName << endl;
+
+	qcfile << "$type\t\t";
+		   switch(Myfile.fileHeader.type){
+			  case Myfile.SpriteType::VP_PARALLEL_UPRIGHT: qcfile << "vp_parallel_upright"; break;
+			  case Myfile.SpriteType::FACING_UPRIGHT: qcfile << "facing_upright"; break;
+			  case Myfile.SpriteType::VP_PARALLEL: qcfile << "vp_parallel"; break;
+			  case Myfile.SpriteType::ORIENTED: qcfile << "oriented"; break;
+			  case Myfile.SpriteType::VP_PARALLEL_ORIENTED: qcfile << "vp_parallel_oriented"; break;
+			  default: cout << "Unknown)";
+		   }; qcfile << endl;
+
+	qcfile << "$texture\t";
+		   switch(Myfile.fileHeader.textureFormat){
+			  case Myfile.TextureType::SPR_NORMAL: qcfile << "normal"; break;
+			  case Myfile.TextureType::SPR_ADDITIVE: qcfile << "additive"; break;
+			  case Myfile.TextureType::SPR_INDEXALPHA: qcfile << "indexalpha"; break;
+			  case Myfile.TextureType::SPR_ALPHTEST: qcfile << "alphatest"; break;
+			  default: cout << "unknown";
+		   }; qcfile << endl;
+	
+	if (Myfile.fileHeader.beamlength>0) qcfile << "$beamlength\t" << Myfile.fileHeader.beamlength << endl;
+
+	if (Myfile.fileHeader.syncType==0) qcfile << "$sync" << endl;
+
 	
 	//At this point, we've read in the whole file. Let's kick out the frames in PNG!
 	for(size_t n=0;n<Myfile.fileHeader.nFrames;++n){
@@ -183,39 +211,81 @@ int main(int argc, char *argv[]){
 		//First, declare the image
 		png::image<png::rgba_pixel> frame(Myfile.Frame(n).width, Myfile.Frame(n).height);
 
-/*		//Create the palette object for png++
-		png::palette pal( Myfile.GetPaletteSize() );
-
-		//Load the palette into png++ palette.
-		for(size_t i=0;i<Myfile.GetPaletteSize();++i)
-			pal[i] = png::color(Myfile.Color(i).at(0), Myfile.Color(i).at(1), Myfile.Color(i).at(2) );
-
-		//Apply the png++ palette to our image object.
-		frame.set_palette(pal);
-*/
-
 		for(size_t i=0;i<Myfile.Frame(n).height;++i)
 			for(size_t j=0;j<Myfile.Frame(n).width;++j)
-		{
-			size_t transparent_color = Myfile.GetPaletteSize()-1;	//Last color in the palette
-			uint8_t pixval = Myfile.Frame(n).Pixel(Myfile.Frame(n).width*i+j);
-			frame[i][j] = png::rgba_pixel( 
-											Myfile.Color(pixval).at(0),
-											Myfile.Color(pixval).at(1),
-											Myfile.Color(pixval).at(2),
-											(pixval == transparent_color)&&transparentBG?0x00:0xFF	//RGBA version
-		);//
-			//frame[i][j] = Myfile.Frame(n).Pixel(Myfile.Frame(n).width*i+j);	//index_pixel version
-		}
+			{
+				size_t transparent_color = Myfile.GetPaletteSize()-1;	//Last color in the palette
+				uint8_t pixval = Myfile.Frame(n).Pixel(Myfile.Frame(n).width*i+j);
+				frame[i][j] = png::rgba_pixel( 
+												Myfile.Color(pixval).at(0),
+												Myfile.Color(pixval).at(1),
+												Myfile.Color(pixval).at(2),
+												(pixval == transparent_color)&&transparentBG?0x00:0xFF	//RGBA version
+				);
+			}
 
+		// We use a stringstream instead of a string because it's easier to
+		// construct our filenames with. setfill and setw not avail with string.
 		stringstream bar;
 
-		//File Frame numbers start at 1.
+		// File Frame numbers start at 1.
 		bar << BaseFileName << "_" << setfill('0') << setw(5) << n+1 << ".png";
 
+
+		// And we continue to construct the qc for each frame. Not sure how to handle group information.
 		if (!testmode) frame.write(bar.str().c_str());
+		qcfile << "$load\t" << bar.str() << endl;		// Don't forget to write the asset to the qc.
+		qcfile << "$frame\t" << setw(5) << 0 << " " << setw(5) << 0 << " " << setw(5) << Myfile.Frame(n).width << " " << setw(5) << Myfile.Frame(n).height << endl;
 
 	}
 
+	//Don't forget to kick out the completed qc file, too
+	if (!testmode) {
+		ofstream qc_output_file( (string(BaseFileName)+string(".qc")).c_str() );
+		qc_output_file << qcfile.rdbuf();
+		qc_output_file.close();
+	}
+
+
 	return 0;
 }
+/*
+*		if (!strcmp (token, "$load"))
+		{
+			Cmd_Load ();
+		}
+*		if (!strcmp (token, "$spritename"))
+		{
+			Cmd_Spritename ();
+		}
+*		else if (!strcmp (token, "$type"))
+		{
+			Cmd_Type ();
+		}
+*		else if (!strcmp (token, "$texture"))
+		{
+			Cmd_Texture ();
+		}
+*		else if (!strcmp (token, "$beamlength"))
+		{
+			Cmd_Beamlength ();
+		}
+*		else if (!strcmp (token, "$sync"))
+		{
+			sprite.synctype = ST_SYNC;
+		}
+*		else if (!strcmp (token, "$frame"))
+		{
+			Cmd_Frame ();
+			sprite.numframes++;
+		}		
+*		else if (!strcmp (token, "$load"))
+		{
+			Cmd_Load ();
+		}
+		else if (!strcmp (token, "$groupstart"))
+		{
+			Cmd_GroupStart ();
+			sprite.numframes++;
+		}
+*/

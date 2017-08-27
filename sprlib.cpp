@@ -9,9 +9,6 @@
 
 #include "sprlib.h"
 
-	using namespace std;
-
-bool verbose = true; //Temp file just to shut up debug info.
 //TODO: Other stuff to make a qc file.
 
 SprImage::SprImage() {
@@ -25,15 +22,20 @@ SprImage::SprImage(std::istream & inStream):SprImage(){
 
 }
 
-int SprImage::load(std::istream & inStream){
+bool SprImage::load(std::istream & inStream){
 
 
 	//Read in the header data.
 	inStream.read((char *) &fileHeader, sizeof(fileHeader));
 
+	//Need to confirm that the header says "IDSP" and it's version 2.
+	if (*(int *) fileHeader.FileID != (('P'<<24)+('S'<<16)+('D'<<8)+'I')) throw "Sprlib: Not a valid sprite file.";
+
+	if (fileHeader.version != 2) throw "Sprlib: Invalid Sprite version. Only version 2 allowed.";
+
 	filePal.SetPaletteSize(fileHeader.nColors);
 	for(size_t i = 0; i < fileHeader.nColors; ++i){
-		vector<uint8_t> color = {0, 0, 0};
+		std::vector<uint8_t> color = {0, 0, 0};
 		uint8_t buffer[3] = {0};
 		inStream.read( (char *) &buffer, sizeof(buffer) );
 
@@ -73,5 +75,7 @@ int SprImage::load(std::istream & inStream){
 
 	}
 
-	return 0;
+	sprLoaded = true;
+
+	return sprLoaded;
 }

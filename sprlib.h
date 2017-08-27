@@ -8,7 +8,6 @@
 //		This is the main library, SPRLIB
 
 #include <stdint.h>
-#include <iostream>
 #include <vector>
 
 #ifndef SPRLIB_SPRIMAGE_H
@@ -57,7 +56,7 @@ public:
 	SprImage();
 	SprImage(std::istream & inStream);
 
-	int load(std::istream & inStream);
+	bool load(std::istream & inStream);
 	size_t GetPaletteSize() { return fileHeader.nColors; }
 	void SetBGColor(uint16_t n) { backgroundColor = n; return; }
 	std::vector<uint8_t> Color(size_t n) { return filePal.GetColor(n); }
