@@ -177,7 +177,7 @@ int main(int argc, char *argv[]){
 			  case Myfile.SpriteType::VP_PARALLEL: qcfile << "vp_parallel"; break;
 			  case Myfile.SpriteType::ORIENTED: qcfile << "oriented"; break;
 			  case Myfile.SpriteType::VP_PARALLEL_ORIENTED: qcfile << "vp_parallel_oriented"; break;
-			  default: cout << "Unknown)";
+			  default: qcfile << "Unknown)";
 		   }; qcfile << endl;
 
 	qcfile << "$texture\t";
@@ -186,7 +186,7 @@ int main(int argc, char *argv[]){
 			  case Myfile.TextureType::SPR_ADDITIVE: qcfile << "additive"; break;
 			  case Myfile.TextureType::SPR_INDEXALPHA: qcfile << "indexalpha"; break;
 			  case Myfile.TextureType::SPR_ALPHTEST: qcfile << "alphatest"; break;
-			  default: cout << "unknown";
+			  default: qcfile << "unknown";
 		   }; qcfile << endl;
 	
 	if (Myfile.fileHeader.beamlength>0) qcfile << "$beamlength\t" << Myfile.fileHeader.beamlength << endl;
